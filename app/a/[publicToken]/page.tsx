@@ -170,7 +170,10 @@ export default function PublicVotePage() {
       type: mode,
       responseId,
       deviceId,
-      contactFingerprint: `${String(contact.email || "")}|${String(contact.phone || "")}`,
+      contactFingerprint:
+        [contact.email, contact.phone].filter(Boolean).join(" | ") ||
+        contact.name ||
+        "—",
       timestamp: serverTimestamp(),
       meta: { selectedOptionIds: selected },
     });

@@ -14,10 +14,38 @@ import {
   updateDoc,
 } from "firebase/firestore";
 import { useEffect, useMemo, useState } from "react";
+import {
+  PieChart,
+  Pie,
+  Cell,
+  ResponsiveContainer,
+  Legend,
+  Tooltip,
+} from "recharts";
 import { db } from "@/lib/firebase";
 import { useAuth } from "@/lib/auth-context";
 import { formatDateTime } from "@/lib/defaults";
 import { Appointment, TimeOption, VoteMode, VoteResponse } from "@/lib/types";
+
+const CHART_COLORS = [
+  "#c9a227", /* accent gold */
+  "#6b9e78",
+  "#9c7cb8",
+  "#7a9dc4",
+  "#c97a5a",
+  "#7eb8a8",
+  "#b8a77e",
+  "#8b9ec4",
+];
+
+const CONTACT_LABELS: Record<string, string> = {
+  name: "שם",
+  phone: "טלפון",
+  email: "אימייל",
+  openQuestion: "שאלה פתוחה",
+  birthday: "יום הולדת",
+  gender: "מין",
+};
 
 type ActivityLog = {
   id: string;
@@ -124,6 +152,14 @@ export default function AppointmentAdminPage() {
     }
     return map;
   }, [options, responses]);
+
+  const chartData = useMemo(() => {
+    return options.map((option, i) => ({
+      name: formatDateTime(option.startAt),
+      value: countsByOption[option.id] ?? 0,
+      color: CHART_COLORS[i % CHART_COLORS.length],
+    }));
+  }, [options, countsByOption]);
 
   if (loading || !user) {
     return <main className="page-shell">טוען...</main>;
@@ -255,13 +291,67 @@ export default function AppointmentAdminPage() {
 
           <section className="tile">
             <h2 className="text-2xl font-bold">תוצאות לפי מועדים</h2>
-            <div className="mt-3 grid gap-2">
-              {options.map((option) => (
-                <div key={option.id} className="tile bg-[var(--bg)]">
-                  <p className="font-semibold">{formatDateTime(option.startAt)}</p>
-                  <p className="mt-1 text-[var(--accent)] font-medium">סך בחירות: {countsByOption[option.id] ?? 0}</p>
-                </div>
-              ))}
+            <div className="mt-3 flex flex-col gap-6 lg:flex-row lg:items-start">
+              <div className="min-h-[240px] w-full lg:min-w-[280px] lg:max-w-[320px]">
+                {chartData.some((d) => d.value > 0) ? (
+                  <ResponsiveContainer width="100%" height={240}>
+                    <PieChart>
+                      <Pie
+                        data={chartData}
+                        cx="50%"
+                        cy="50%"
+                        innerRadius={48}
+                        outerRadius={90}
+                        paddingAngle={2}
+                        dataKey="value"
+                        label={({ name, value }) =>
+                          value > 0 ? `${name}: ${value}` : ""
+                        }
+                      >
+                        {chartData.map((entry, i) => (
+                          <Cell key={entry.name} fill={entry.color} />
+                        ))}
+                      </Pie>
+                      <Tooltip
+                        contentStyle={{
+                          background: "var(--bg-overlay)",
+                          border: "1px solid var(--border)",
+                          borderRadius: "8px",
+                          color: "var(--text)",
+                        }}
+                        formatter={(value) => [value ?? 0, "בחירות"]}
+                        labelFormatter={(label) => label}
+                      />
+                      <Legend
+                        layout="vertical"
+                        align="left"
+                        verticalAlign="middle"
+                        wrapperStyle={{ paddingRight: "16px" }}
+                        formatter={(value, entry) => {
+                          const payload = entry.payload as { value?: number };
+                          return (
+                            <span style={{ color: "var(--text)" }}>
+                              {value}: {payload?.value ?? 0}
+                            </span>
+                          );
+                        }}
+                      />
+                    </PieChart>
+                  </ResponsiveContainer>
+                ) : (
+                  <div className="flex h-[240px] items-center justify-center rounded-lg border border-dashed border-[var(--border)] bg-[var(--bg)]">
+                    <p className="text-[var(--text-muted)]">אין הצבעות עדיין</p>
+                  </div>
+                )}
+              </div>
+              <div className="grid flex-1 gap-2">
+                {options.map((option) => (
+                  <div key={option.id} className="tile bg-[var(--bg)]">
+                    <p className="font-semibold">{formatDateTime(option.startAt)}</p>
+                    <p className="mt-1 text-[var(--accent)] font-medium">סך בחירות: {countsByOption[option.id] ?? 0}</p>
+                  </div>
+                ))}
+              </div>
             </div>
           </section>
         </div>
@@ -308,7 +398,8 @@ export default function AppointmentAdminPage() {
                   <td className="p-2">{row.selectedOptionIds?.length ?? 0}</td>
                   <td className="p-2 text-sm text-[var(--text-muted)]">
                     {Object.entries(row.contact || {})
-                      .map(([key, value]) => `${key}: ${String(value)}`)
+                      .filter(([, v]) => v != null && String(v).trim())
+                      .map(([key, value]) => `${CONTACT_LABELS[key] ?? key}: ${String(value)}`)
                       .join(" | ") || "-"}
                   </td>
                   <td className="p-2 text-sm text-[var(--text)]">{row.note?.trim() || "-"}</td>
