@@ -1,0 +1,43 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function isOwner(appointmentId) {
+      return request.auth != null
+        && get(/databases/$(database)/documents/appointments/$(appointmentId)).data.ownerUid
+          == request.auth.uid;
+    }
+
+    match /appointments/{appointmentId} {
+      allow read: if true;
+      allow create: if request.auth != null
+        && request.resource.data.ownerUid == request.auth.uid
+        && request.resource.data.publicToken is string
+        && request.resource.data.voteMode in ['single', 'limited', 'unlimited']
+        && request.resource.data.resultsVisibility in ['hidden', 'after_submit', 'live'];
+      allow update: if isOwner(appointmentId);
+      allow delete: if false;
+
+      match /timeOptions/{optionId} {
+        allow read: if true;
+        allow create, update: if isOwner(appointmentId);
+        allow delete: if false;
+      }
+
+      match /responses/{responseId} {
+        allow read: if isOwner(appointmentId);
+        allow create, update: if request.resource.data.selectedOptionIds is list
+          && request.resource.data.selectedOptionIds.size() >= 1
+          && request.resource.data.deviceId is string
+          && request.resource.data.contact is map;
+        allow delete: if false;
+      }
+
+      match /activity/{activityId} {
+        allow read: if isOwner(appointmentId);
+        allow create: if request.resource.data.type in ['submit', 'update', 'reopen', 'settings_change']
+          && request.resource.data.responseId is string;
+        allow update, delete: if false;
+      }
+    }
+  }
+}
