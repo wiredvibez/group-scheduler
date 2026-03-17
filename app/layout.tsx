@@ -25,7 +25,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="he" dir="rtl">
-      <body className={`${fbTipograf.variable} antialiased`}>
+      <body className={`${fbTipograf.variable} ${fbTipograf.className} antialiased`}>
         <AppProviders>{children}</AppProviders>
       </body>
     </html>
