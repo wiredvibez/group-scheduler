@@ -82,22 +82,28 @@ export default function ClientVotePage() {
 
         const currentDeviceId = getDeviceId();
         setDeviceId(currentDeviceId);
-        const existingSnap = await getDocs(
-          query(
-            collection(db, "appointments", item.id, "responses"),
-            where("deviceId", "==", currentDeviceId),
-            limit(1),
-          ),
-        );
-        if (!existingSnap.empty) {
-          const existing = existingSnap.docs[0];
-          const existingData = existing.data() as Omit<VoteResponse, "id">;
-          setExistingResponseId(existing.id);
-          setSelected(existingData.selectedOptionIds ?? []);
-          setContact(existingData.contact ?? {});
-          setNote(existingData.note ?? "");
+        try {
+          const existingSnap = await getDocs(
+            query(
+              collection(db, "appointments", item.id, "responses"),
+              where("deviceId", "==", currentDeviceId),
+              limit(1),
+            ),
+          );
+          if (!existingSnap.empty) {
+            const existing = existingSnap.docs[0];
+            const existingData = existing.data() as Omit<VoteResponse, "id">;
+            setExistingResponseId(existing.id);
+            setSelected(existingData.selectedOptionIds ?? []);
+            setContact(existingData.contact ?? {});
+            setNote(existingData.note ?? "");
+          }
+        } catch (existingErr) {
+          // Responses are read-restricted (owner only); continue without pre-fill
+          console.warn("[ClientVotePage] Could not load existing response:", existingErr);
         }
-      } catch {
+      } catch (err) {
+        console.error("[ClientVotePage] Load error:", err);
         setError("שגיאה בטעינה. נסה שוב.");
       } finally {
         setLoading(false);
@@ -134,6 +140,13 @@ export default function ClientVotePage() {
           <p className="msg-error" role="alert">
             {error || "שגיאה בטעינה"}
           </p>
+          <button
+            type="button"
+            className="btn-primary mt-4"
+            onClick={() => window.location.reload()}
+          >
+            נסה שוב
+          </button>
         </section>
       </main>
     );
