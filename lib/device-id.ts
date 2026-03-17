@@ -5,12 +5,22 @@ export function getDeviceId(): string {
     return "";
   }
 
-  const existing = window.localStorage.getItem(KEY);
-  if (existing) {
-    return existing;
+  try {
+    const existing = window.localStorage.getItem(KEY);
+    if (existing) return existing;
+    const created = crypto.randomUUID();
+    window.localStorage.setItem(KEY, created);
+    return created;
+  } catch {
+    // Private mode or storage disabled - use sessionStorage or in-memory fallback
+    try {
+      const existing = window.sessionStorage.getItem(KEY);
+      if (existing) return existing;
+      const created = crypto.randomUUID();
+      window.sessionStorage.setItem(KEY, created);
+      return created;
+    } catch {
+      return crypto.randomUUID();
+    }
   }
-
-  const created = crypto.randomUUID();
-  window.localStorage.setItem(KEY, created);
-  return created;
 }
