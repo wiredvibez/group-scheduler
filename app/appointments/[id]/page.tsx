@@ -3,6 +3,23 @@
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import {
+  DndContext,
+  closestCenter,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from "@dnd-kit/core";
+import {
+  arrayMove,
+  SortableContext,
+  sortableKeyboardCoordinates,
+  useSortable,
+  verticalListSortingStrategy,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
+import {
   collection,
   doc,
   getDoc,
@@ -14,6 +31,18 @@ import {
   updateDoc,
 } from "firebase/firestore";
 import { useEffect, useMemo, useState } from "react";
+
+function useIsMobile() {
+  const [isMobile, setIsMobile] = useState(false);
+  useEffect(() => {
+    const mq = window.matchMedia("(max-width: 768px)");
+    const update = () => setIsMobile(mq.matches);
+    update();
+    mq.addEventListener("change", update);
+    return () => mq.removeEventListener("change", update);
+  }, []);
+  return isMobile;
+}
 import {
   PieChart,
   Pie,
@@ -60,16 +89,59 @@ function toDate(seconds?: number) {
   return seconds ? new Date(seconds * 1000).toLocaleString("he-IL") : "-";
 }
 
+function SortableOptionItem({
+  option,
+  voteCount,
+  savingOrder,
+}: {
+  option: TimeOption;
+  voteCount: number;
+  savingOrder: boolean;
+}) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
+    useSortable({ id: option.id });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+  };
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      className={`flex items-center gap-2 rounded-lg border border-[var(--border)] bg-[var(--bg)] p-3 ${isDragging ? "opacity-50" : ""}`}
+    >
+      <div
+        className={`flex cursor-grab touch-none items-center justify-center rounded p-1.5 text-[var(--text-muted)] hover:bg-[var(--bg-overlay)] hover:text-[var(--text)] active:cursor-grabbing ${savingOrder ? "pointer-events-none opacity-50" : ""}`}
+        {...attributes}
+        {...listeners}
+        aria-label="גרור לשינוי סדר"
+      >
+        <svg className="size-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 8h16M4 16h16" />
+        </svg>
+      </div>
+      <div className="flex-1">
+        <p className="font-semibold">{formatDateTime(option.startAt)}</p>
+        <p className="text-sm text-[var(--accent)]">סך בחירות: {voteCount}</p>
+      </div>
+    </div>
+  );
+}
+
 export default function AppointmentAdminPage() {
   const params = useParams<{ id: string }>();
   const router = useRouter();
   const { user, loading } = useAuth();
+  const isMobile = useIsMobile();
   const [appointment, setAppointment] = useState<Appointment | null>(null);
   const [options, setOptions] = useState<TimeOption[]>([]);
   const [responses, setResponses] = useState<VoteResponse[]>([]);
   const [activity, setActivity] = useState<ActivityLog[]>([]);
   const [error, setError] = useState("");
   const [savingSettings, setSavingSettings] = useState(false);
+  const [savingOrder, setSavingOrder] = useState(false);
   const [voteMode, setVoteMode] = useState<VoteMode>("limited");
   const [maxSelections, setMaxSelections] = useState(3);
   const [resultsVisibility, setResultsVisibility] = useState<
@@ -117,11 +189,19 @@ export default function AppointmentAdminPage() {
         ),
       ]);
 
+      const opts = optionsSnap.docs.map((docSnap) => ({
+        id: docSnap.id,
+        ...(docSnap.data() as Omit<TimeOption, "id">),
+      }));
+      const order = data.timeOptionOrder as string[] | undefined;
       setOptions(
-        optionsSnap.docs.map((docSnap) => ({
-          id: docSnap.id,
-          ...(docSnap.data() as Omit<TimeOption, "id">),
-        })),
+        order?.length
+          ? [...opts].sort(
+              (a, b) =>
+                (order.indexOf(a.id) === -1 ? 999 : order.indexOf(a.id)) -
+                (order.indexOf(b.id) === -1 ? 999 : order.indexOf(b.id)),
+            )
+          : opts,
       );
       setResponses(
         responsesSnap.docs.map((docSnap) => ({
@@ -160,6 +240,27 @@ export default function AppointmentAdminPage() {
       color: CHART_COLORS[i % CHART_COLORS.length],
     }));
   }, [options, countsByOption]);
+
+  const dndSensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
+  );
+
+  const handleOrderDragEnd = async (event: DragEndEvent) => {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+    const oldIndex = options.findIndex((o) => o.id === active.id);
+    const newIndex = options.findIndex((o) => o.id === over.id);
+    if (oldIndex === -1 || newIndex === -1) return;
+    const next = arrayMove(options, oldIndex, newIndex);
+    setOptions(next);
+    setSavingOrder(true);
+    await updateDoc(doc(db, "appointments", appointment!.id), {
+      timeOptionOrder: next.map((o) => o.id),
+      updatedAt: serverTimestamp(),
+    });
+    setSavingOrder(false);
+  };
 
   if (loading || !user) {
     return <main className="page-shell">טוען...</main>;
@@ -291,68 +392,100 @@ export default function AppointmentAdminPage() {
 
           <section className="tile">
             <h2 className="text-2xl font-bold">תוצאות לפי מועדים</h2>
-            <div className="mt-3 flex flex-col gap-6 lg:flex-row lg:items-start">
-              <div className="min-h-[240px] w-full lg:min-w-[280px] lg:max-w-[320px]">
-                {chartData.some((d) => d.value > 0) ? (
-                  <ResponsiveContainer width="100%" height={240}>
-                    <PieChart>
-                      <Pie
-                        data={chartData}
-                        cx="50%"
-                        cy="50%"
-                        innerRadius={48}
-                        outerRadius={90}
-                        paddingAngle={2}
-                        dataKey="value"
-                        label={({ name, value }) =>
-                          value > 0 ? `${name}: ${value}` : ""
-                        }
-                      >
-                        {chartData.map((entry, i) => (
-                          <Cell key={entry.name} fill={entry.color} />
-                        ))}
-                      </Pie>
-                      <Tooltip
-                        contentStyle={{
-                          background: "var(--bg-overlay)",
-                          border: "1px solid var(--border)",
-                          borderRadius: "8px",
-                          color: "var(--text)",
-                        }}
-                        formatter={(value) => [value ?? 0, "בחירות"]}
-                        labelFormatter={(label) => label}
-                      />
-                      <Legend
-                        layout="vertical"
-                        align="left"
-                        verticalAlign="middle"
-                        wrapperStyle={{ paddingRight: "16px" }}
-                        formatter={(value, entry) => {
-                          const payload = entry.payload as { value?: number };
-                          return (
-                            <span style={{ color: "var(--text)" }}>
-                              {value}: {payload?.value ?? 0}
-                            </span>
-                          );
-                        }}
-                      />
-                    </PieChart>
-                  </ResponsiveContainer>
-                ) : (
-                  <div className="flex h-[240px] items-center justify-center rounded-lg border border-dashed border-[var(--border)] bg-[var(--bg)]">
-                    <p className="text-[var(--text-muted)]">אין הצבעות עדיין</p>
-                  </div>
-                )}
-              </div>
-              <div className="grid flex-1 gap-2">
-                {options.map((option) => (
-                  <div key={option.id} className="tile bg-[var(--bg)]">
-                    <p className="font-semibold">{formatDateTime(option.startAt)}</p>
-                    <p className="mt-1 text-[var(--accent)] font-medium">סך בחירות: {countsByOption[option.id] ?? 0}</p>
-                  </div>
-                ))}
-              </div>
+            <div
+              className={`mt-3 w-full overflow-hidden ${isMobile ? "min-h-[320px]" : "min-h-[280px]"}`}
+            >
+              {chartData.some((d) => d.value > 0) ? (
+                <ResponsiveContainer
+                  width="100%"
+                  height={isMobile ? 320 : 280}
+                >
+                  <PieChart
+                    margin={
+                      isMobile
+                        ? { top: 8, right: 16, bottom: 80, left: 16 }
+                        : { top: 8, right: 16, bottom: 72, left: 16 }
+                    }
+                  >
+                    <Pie
+                      data={chartData}
+                      cx="50%"
+                      cy={isMobile ? "40%" : "42%"}
+                      innerRadius={isMobile ? 36 : 48}
+                      outerRadius={isMobile ? 68 : 90}
+                      paddingAngle={2}
+                      dataKey="value"
+                      label={false}
+                    >
+                      {chartData.map((entry) => (
+                        <Cell key={entry.name} fill={entry.color} />
+                      ))}
+                    </Pie>
+                    <Tooltip
+                      contentStyle={{
+                        background: "var(--bg-overlay)",
+                        border: "1px solid var(--border)",
+                        borderRadius: "8px",
+                        color: "var(--text)",
+                      }}
+                      formatter={(value) => [value ?? 0, "בחירות"]}
+                      labelFormatter={(label) => label}
+                    />
+                    <Legend
+                      layout="horizontal"
+                      align="center"
+                      verticalAlign="bottom"
+                      wrapperStyle={{
+                        paddingTop: "12px",
+                        width: "100%",
+                      }}
+                      formatter={(value, entry) => {
+                        const payload = entry.payload as { value?: number };
+                        return (
+                          <span style={{ color: "var(--text)", fontSize: "12px" }}>
+                            {value}: {payload?.value ?? 0}
+                          </span>
+                        );
+                      }}
+                    />
+                  </PieChart>
+                </ResponsiveContainer>
+              ) : (
+                <div
+                  className={`flex items-center justify-center rounded-lg border border-dashed border-[var(--border)] bg-[var(--bg)] ${isMobile ? "h-[320px]" : "h-[280px]"}`}
+                >
+                  <p className="text-[var(--text-muted)]">אין הצבעות עדיין</p>
+                </div>
+              )}
             </div>
+          </section>
+
+          <section className="tile">
+            <h2 className="text-2xl font-bold">סדר מועדים</h2>
+            <p className="mt-1 text-sm text-[var(--text-muted)]">
+              גרור לשינוי הסדר. הסדר יוצג גם בטופס ההצבעה.
+            </p>
+            <DndContext
+              sensors={dndSensors}
+              collisionDetection={closestCenter}
+              onDragEnd={handleOrderDragEnd}
+            >
+              <SortableContext
+                items={options.map((o) => o.id)}
+                strategy={verticalListSortingStrategy}
+              >
+                <div className="mt-3 grid gap-2">
+                  {options.map((option) => (
+                    <SortableOptionItem
+                      key={option.id}
+                      option={option}
+                      voteCount={countsByOption[option.id] ?? 0}
+                      savingOrder={savingOrder}
+                    />
+                  ))}
+                </div>
+              </SortableContext>
+            </DndContext>
           </section>
         </div>
 

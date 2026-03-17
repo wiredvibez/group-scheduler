@@ -30,6 +30,8 @@ export type Appointment = {
   resultsVisibility: ResultsVisibility;
   contactFieldsConfig: ContactFieldsConfig;
   publicToken: string;
+  /** IDs of timeOptions in display order (admin results + voter form) */
+  timeOptionOrder?: string[];
   createdAt?: unknown;
   updatedAt?: unknown;
 };

@@ -73,11 +73,19 @@ export default function ClientVotePage() {
         const optionsSnap = await getDocs(
           collection(db, "appointments", item.id, "timeOptions"),
         );
+        const opts = optionsSnap.docs.map((docSnap) => ({
+          id: docSnap.id,
+          ...(docSnap.data() as Omit<TimeOption, "id">),
+        }));
+        const order = itemData.timeOptionOrder as string[] | undefined;
         setOptions(
-          optionsSnap.docs.map((docSnap) => ({
-            id: docSnap.id,
-            ...(docSnap.data() as Omit<TimeOption, "id">),
-          })),
+          order?.length
+            ? [...opts].sort(
+                (a, b) =>
+                  (order.indexOf(a.id) === -1 ? 999 : order.indexOf(a.id)) -
+                  (order.indexOf(b.id) === -1 ? 999 : order.indexOf(b.id)),
+              )
+            : opts,
         );
 
         const currentDeviceId = getDeviceId();
