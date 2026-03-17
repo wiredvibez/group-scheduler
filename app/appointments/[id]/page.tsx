@@ -48,7 +48,6 @@ import {
   Pie,
   Cell,
   ResponsiveContainer,
-  Legend,
   Tooltip,
 } from "recharts";
 import { db } from "@/lib/firebase";
@@ -392,72 +391,62 @@ export default function AppointmentAdminPage() {
 
           <section className="tile">
             <h2 className="text-2xl font-bold">תוצאות לפי מועדים</h2>
-            <div
-              className={`mt-3 w-full overflow-hidden ${isMobile ? "min-h-[320px]" : "min-h-[280px]"}`}
-            >
-              {chartData.some((d) => d.value > 0) ? (
-                <ResponsiveContainer
-                  width="100%"
-                  height={isMobile ? 320 : 280}
-                >
-                  <PieChart
-                    margin={
-                      isMobile
-                        ? { top: 8, right: 16, bottom: 80, left: 16 }
-                        : { top: 8, right: 16, bottom: 72, left: 16 }
-                    }
-                  >
-                    <Pie
-                      data={chartData}
-                      cx="50%"
-                      cy={isMobile ? "40%" : "42%"}
-                      innerRadius={isMobile ? 36 : 48}
-                      outerRadius={isMobile ? 68 : 90}
-                      paddingAngle={2}
-                      dataKey="value"
-                      label={false}
-                    >
-                      {chartData.map((entry) => (
-                        <Cell key={entry.name} fill={entry.color} />
-                      ))}
-                    </Pie>
-                    <Tooltip
-                      contentStyle={{
-                        background: "var(--bg-overlay)",
-                        border: "1px solid var(--border)",
-                        borderRadius: "8px",
-                        color: "var(--text)",
-                      }}
-                      formatter={(value) => [value ?? 0, "בחירות"]}
-                      labelFormatter={(label) => label}
-                    />
-                    <Legend
-                      layout="horizontal"
-                      align="center"
-                      verticalAlign="bottom"
-                      wrapperStyle={{
-                        paddingTop: "12px",
-                        width: "100%",
-                      }}
-                      formatter={(value, entry) => {
-                        const payload = entry.payload as { value?: number };
-                        return (
-                          <span style={{ color: "var(--text)", fontSize: "12px" }}>
-                            {value}: {payload?.value ?? 0}
-                          </span>
-                        );
-                      }}
-                    />
-                  </PieChart>
-                </ResponsiveContainer>
-              ) : (
-                <div
-                  className={`flex items-center justify-center rounded-lg border border-dashed border-[var(--border)] bg-[var(--bg)] ${isMobile ? "h-[320px]" : "h-[280px]"}`}
-                >
-                  <p className="text-[var(--text-muted)]">אין הצבעות עדיין</p>
+            {chartData.some((d) => d.value > 0) ? (
+              <div className="mt-3 flex flex-col gap-6">
+                <div className="flex justify-center" style={{ minHeight: isMobile ? 220 : 200 }}>
+                  <ResponsiveContainer width="100%" height={isMobile ? 220 : 200}>
+                    <PieChart margin={{ top: 8, right: 16, bottom: 8, left: 16 }}>
+                      <Pie
+                        data={chartData}
+                        cx="50%"
+                        cy="50%"
+                        innerRadius={isMobile ? 32 : 40}
+                        outerRadius={isMobile ? 68 : 80}
+                        paddingAngle={2}
+                        dataKey="value"
+                        label={false}
+                      >
+                        {chartData.map((entry) => (
+                          <Cell key={entry.name} fill={entry.color} />
+                        ))}
+                      </Pie>
+                      <Tooltip
+                        contentStyle={{
+                          background: "var(--bg-overlay)",
+                          border: "1px solid var(--border)",
+                          borderRadius: "8px",
+                          color: "var(--text)",
+                        }}
+                        formatter={(value) => [value ?? 0, "בחירות"]}
+                        labelFormatter={(label) => label}
+                      />
+                    </PieChart>
+                  </ResponsiveContainer>
                 </div>
-              )}
-            </div>
+                <div
+                  className={`flex flex-wrap gap-x-4 gap-y-2 ${isMobile ? "flex-col" : "flex-row justify-center"}`}
+                >
+                  {chartData.map((entry) => (
+                    <div
+                      key={entry.name}
+                      className="flex items-center gap-2"
+                    >
+                      <span
+                        className="h-3 w-3 shrink-0 rounded-sm"
+                        style={{ backgroundColor: entry.color }}
+                      />
+                      <span className="text-sm text-[var(--text)]">
+                        {entry.name}: {entry.value}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : (
+              <div className="mt-3 flex h-[200px] items-center justify-center rounded-lg border border-dashed border-[var(--border)] bg-[var(--bg)]">
+                <p className="text-[var(--text-muted)]">אין הצבעות עדיין</p>
+              </div>
+            )}
           </section>
 
           <section className="tile">
