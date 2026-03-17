@@ -1,11 +1,10 @@
 "use client";
 
 import {
-  getRedirectResult,
   GoogleAuthProvider,
   User,
   onAuthStateChanged,
-  signInWithRedirect,
+  signInWithPopup,
   signOut as firebaseSignOut,
 } from "firebase/auth";
 import { createContext, useContext, useEffect, useMemo, useState } from "react";
@@ -33,18 +32,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return () => unsub();
   }, []);
 
-  useEffect(() => {
-    getRedirectResult(auth).catch(() => {
-      // User may have cancelled or error; onAuthStateChanged still runs
-    });
-  }, []);
-
   const value = useMemo<AuthContextValue>(
     () => ({
       user,
       loading,
       signInWithGoogle: async () => {
-        await signInWithRedirect(auth, googleProvider);
+        await signInWithPopup(auth, googleProvider);
       },
       signOut: async () => {
         await firebaseSignOut(auth);
