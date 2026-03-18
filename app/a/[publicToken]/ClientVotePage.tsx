@@ -410,7 +410,8 @@ export default function ClientVotePage() {
 
               await upsert(undefined, "submit");
               router.push(`/a/${params.publicToken}/done`);
-            } catch {
+            } catch (err) {
+              console.error("[ClientVotePage] Save error:", err);
               setError("שמירה נכשלה. נסה שוב.");
             } finally {
               setSaving(false);

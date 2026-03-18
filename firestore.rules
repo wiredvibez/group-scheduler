@@ -24,7 +24,7 @@ service cloud.firestore {
       }
 
       match /responses/{responseId} {
-        allow read: if isOwner(appointmentId);
+        allow read: if true;
         allow create, update: if request.resource.data.selectedOptionIds is list
           && request.resource.data.selectedOptionIds.size() >= 1
           && request.resource.data.deviceId is string
